@@ -2,10 +2,30 @@
 node_modules/
 */node_modules/
 
+# Python caches
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+*/*/*/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Local databases
+*.db
+*.sqlite3
+
 # Production builds
 dist/
 dist-ssr/
 build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
 
 # Logs
 logs/

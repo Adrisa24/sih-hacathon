@@ -52,33 +52,21 @@ function App() {
   ================================= */
 
   const getStatusText = (status) => {
-    if (status === "valid") {
-      return "VALID";
-    }
-
-    if (status === "expiring") {
-      return "EXPIRING SOON";
-    }
-
-    if (status === "expired") {
-      return "EXPIRED";
-    }
+    if (status === "valid") return "VALID";
+    if (status === "expiring") return "EXPIRING SOON";
+    if (status === "expired") return "EXPIRED";
 
     return "UNKNOWN";
   };
 
   /* =================================
      DATE FORMAT
-     DD-MM-YYYY
   ================================= */
 
   const getFormattedDate = () => {
     const now = new Date();
 
-    const day = String(now.getDate()).padStart(
-      2,
-      "0"
-    );
+    const day = String(now.getDate()).padStart(2, "0");
 
     const month = String(
       now.getMonth() + 1
@@ -90,7 +78,7 @@ function App() {
   };
 
   /* =================================
-     GET EXACT CURRENT LOCATION
+     GET CURRENT LOCATION
   ================================= */
 
   const getCurrentLocation = () => {
@@ -102,43 +90,29 @@ function App() {
       return;
     }
 
-    setLocation(
-      "Fetching current location..."
-    );
+    setLocation("Fetching current location...");
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const latitude =
-          position.coords.latitude;
-
-        const longitude =
-          position.coords.longitude;
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
 
         try {
           const response = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
           );
 
-          const data =
-            await response.json();
+          const data = await response.json();
 
-          if (
-            data &&
-            data.display_name
-          ) {
-            setLocation(
-              data.display_name
-            );
+          if (data && data.display_name) {
+            setLocation(data.display_name);
           } else {
             setLocation(
               "Exact location could not be identified."
             );
           }
         } catch (error) {
-          console.error(
-            "Location error:",
-            error
-          );
+          console.error("Location error:", error);
 
           setLocation(
             "Unable to fetch exact location."
@@ -147,14 +121,10 @@ function App() {
       },
 
       (error) => {
-        console.error(
-          "Geolocation error:",
-          error
-        );
+        console.error("Geolocation error:", error);
 
         if (
-          error.code ===
-          error.PERMISSION_DENIED
+          error.code === error.PERMISSION_DENIED
         ) {
           setLocation(
             "Location permission was denied."
@@ -207,19 +177,14 @@ function App() {
       streamRef.current = stream;
 
       if (videoRef.current) {
-        videoRef.current.srcObject =
-          stream;
+        videoRef.current.srcObject = stream;
 
-        videoRef.current.onloadedmetadata =
-          () => {
-            videoRef.current.play();
-          };
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current.play();
+        };
       }
     } catch (error) {
-      console.error(
-        "Camera error:",
-        error
-      );
+      console.error("Camera error:", error);
 
       setCameraError(
         "Unable to access camera. Please allow camera permission."
@@ -253,30 +218,21 @@ function App() {
         barcodeScanIntervalRef.current
       );
 
-      barcodeScanIntervalRef.current =
-        null;
+      barcodeScanIntervalRef.current = null;
     }
   };
 
   /* =================================
-     CHECK IF ALREADY SCANNED
-
-     SAME PERSON CANNOT SCAN TWICE
-     WITHIN ONE MINUTE
+     CHECK DUPLICATE SCAN
   ================================= */
 
-  const checkAlreadyScanned = (
-    enteredBarcode
-  ) => {
+  const checkAlreadyScanned = (enteredBarcode) => {
     const now = Date.now();
 
     const previousScan = history.find(
       (record) =>
-        record.barcode ===
-          enteredBarcode &&
-        now -
-          record.timestamp <
-          60000
+        record.barcode === enteredBarcode &&
+        now - record.timestamp < 60000
     );
 
     return previousScan;
@@ -303,15 +259,12 @@ function App() {
 
       date: getFormattedDate(),
 
-      time: now.toLocaleTimeString(
-        [],
-        {
-          hour: "2-digit",
-          minute: "2-digit",
-        }
-      ),
+      time: now.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
 
-      location: location,
+      location,
     };
   };
 
@@ -319,38 +272,28 @@ function App() {
      PROCESS BARCODE
   ================================= */
 
-  const processBarcode = (
-    barcodeValue
-  ) => {
-    const enteredBarcode =
-      barcodeValue
-        ?.trim()
-        .toUpperCase();
+  const processBarcode = (barcodeValue) => {
+    const enteredBarcode = barcodeValue
+      ?.trim()
+      .toUpperCase();
 
     if (!enteredBarcode) {
       return;
     }
 
     const alreadyScanned =
-      checkAlreadyScanned(
-        enteredBarcode
-      );
+      checkAlreadyScanned(enteredBarcode);
 
     if (alreadyScanned) {
       setIsScanning(false);
 
       setScanResult({
         success: false,
-
         alreadyScanned: true,
 
         name: alreadyScanned.name,
-
-        barcode:
-          alreadyScanned.barcode,
-
-        workerId:
-          alreadyScanned.workerId,
+        barcode: alreadyScanned.barcode,
+        workerId: alreadyScanned.workerId,
 
         message:
           "This worker has already been scanned within the last 1 minute.",
@@ -368,9 +311,7 @@ function App() {
 
     setTimeout(() => {
       const worker =
-        wristbandDatabase[
-          enteredBarcode
-        ];
+        wristbandDatabase[enteredBarcode];
 
       if (!worker) {
         setIsScanning(false);
@@ -390,18 +331,15 @@ function App() {
         return;
       }
 
-      const scanData =
-        createScanData(
-          worker,
-          enteredBarcode
-        );
-
-      setHistory(
-        (previousHistory) => [
-          scanData,
-          ...previousHistory,
-        ]
+      const scanData = createScanData(
+        worker,
+        enteredBarcode
       );
+
+      setHistory((previousHistory) => [
+        scanData,
+        ...previousHistory,
+      ]);
 
       setScanResult({
         success: true,
@@ -418,15 +356,13 @@ function App() {
   };
 
   /* =================================
-     AUTOMATIC CAMERA BARCODE SCANNER
+     BARCODE DETECTION
   ================================= */
 
   const startBarcodeDetection = () => {
-    if (
-      !("BarcodeDetector" in window)
-    ) {
+    if (!("BarcodeDetector" in window)) {
       console.log(
-        "BarcodeDetector is not supported. Demo scanner will be used."
+        "BarcodeDetector is not supported. Demo scan will be used."
       );
 
       return;
@@ -450,10 +386,8 @@ function App() {
         setInterval(async () => {
           if (
             detectedBarcodeRef.current ||
-            isScanning ||
             !videoRef.current ||
-            videoRef.current.readyState <
-              2
+            videoRef.current.readyState < 2
           ) {
             return;
           }
@@ -465,22 +399,17 @@ function App() {
               );
 
             if (
-              detectedBarcodes.length >
-              0
+              detectedBarcodes.length > 0
             ) {
               const barcodeValue =
-                detectedBarcodes[0]
-                  .rawValue;
+                detectedBarcodes[0].rawValue;
 
               if (barcodeValue) {
-                detectedBarcodeRef.current =
-                  true;
+                detectedBarcodeRef.current = true;
 
                 stopBarcodeDetection();
 
-                processBarcode(
-                  barcodeValue
-                );
+                processBarcode(barcodeValue);
               }
             }
           } catch (error) {
@@ -499,10 +428,7 @@ function App() {
   };
 
   /* =================================
-     AUTOMATIC DEMO SCAN FALLBACK
-
-     THIS STARTS AUTOMATICALLY.
-     NO BUTTON IS REQUIRED.
+     AUTOMATIC DEMO SCAN
   ================================= */
 
   const automaticScan = () => {
@@ -527,32 +453,27 @@ function App() {
         )
       ];
 
+    detectedBarcodeRef.current = true;
+
     processBarcode(randomBarcode);
   };
 
   /* =================================
-     PAGE 3 CAMERA EFFECT
+     SCANNER EFFECT
   ================================= */
 
   useEffect(() => {
     if (screen === "scanner") {
-      detectedBarcodeRef.current =
-        false;
+      detectedBarcodeRef.current = false;
 
       startCamera();
+
       getCurrentLocation();
 
       const detectionTimer =
         setTimeout(() => {
           startBarcodeDetection();
         }, 1500);
-
-      /*
-        AUTOMATIC SCAN FALLBACK
-
-        This keeps the previous
-        automatic scanning feature.
-      */
 
       autoScanTimerRef.current =
         setTimeout(() => {
@@ -564,11 +485,10 @@ function App() {
         }, 5000);
 
       return () => {
-        clearTimeout(
-          detectionTimer
-        );
+        clearTimeout(detectionTimer);
 
         stopCamera();
+
         stopBarcodeDetection();
 
         if (
@@ -585,26 +505,18 @@ function App() {
   }, [screen]);
 
   /* =================================
-     START
+     NAVIGATION
   ================================= */
 
   const startScanning = () => {
     setScreen("intro");
   };
 
-  /* =================================
-     OPEN SCANNER
-  ================================= */
-
   const openScanner = () => {
     setCameraError("");
     setIsScanning(false);
     setScreen("scanner");
   };
-
-  /* =================================
-     CLEAR HISTORY
-  ================================= */
 
   const clearHistory = () => {
     setHistory([]);
@@ -618,11 +530,21 @@ function App() {
     return (
       <div className="app-screen home-screen">
         <header className="home-header">
-          <h1>SULFSCAN</h1>
+          <div className="home-brand">
+            <img
+              src="/sulfscan-logo.png"
+              alt="SULFISCAN Logo"
+              className="app-logo"
+            />
 
-          <span className="app-tag">
-            SMART WORKER CONTROL
-          </span>
+            <div>
+              <h1>SULFISCAN</h1>
+
+              <span className="app-tag">
+                SMART WORKER CONTROL
+              </span>
+            </div>
+          </div>
         </header>
 
         <main className="home-content">
@@ -658,45 +580,19 @@ function App() {
 
         <div className="moving-features">
           <div className="feature-track">
-            <span>
-              SMART BARCODE SCANNING
-            </span>
+            <span>SMART BARCODE SCANNING</span>
+            <span>REAL-TIME VALIDATION</span>
+            <span>SECURE WORKER ACCESS</span>
+            <span>ENTRY & EXIT MONITORING</span>
+            <span>SCAN HISTORY</span>
+            <span>INSTANT STATUS CHECK</span>
 
-            <span>
-              REAL-TIME VALIDATION
-            </span>
-
-            <span>
-              SECURE WORKER ACCESS
-            </span>
-
-            <span>
-              ENTRY & EXIT MONITORING
-            </span>
-
-            <span>
-              SCAN HISTORY
-            </span>
-
-            <span>
-              INSTANT STATUS CHECK
-            </span>
-
-            <span>
-              SMART BARCODE SCANNING
-            </span>
-
-            <span>
-              REAL-TIME VALIDATION
-            </span>
-
-            <span>
-              SECURE WORKER ACCESS
-            </span>
-
-            <span>
-              ENTRY & EXIT MONITORING
-            </span>
+            <span>SMART BARCODE SCANNING</span>
+            <span>REAL-TIME VALIDATION</span>
+            <span>SECURE WORKER ACCESS</span>
+            <span>ENTRY & EXIT MONITORING</span>
+            <span>SCAN HISTORY</span>
+            <span>INSTANT STATUS CHECK</span>
           </div>
         </div>
       </div>
@@ -704,7 +600,7 @@ function App() {
   }
 
   /* =================================
-     PAGE 2 — INTRODUCTION
+     PAGE 2 — INTRO
   ================================= */
 
   if (screen === "intro") {
@@ -753,7 +649,7 @@ function App() {
   }
 
   /* =================================
-     PAGE 3 — BARCODE SCANNER
+     PAGE 3 — SCANNER
   ================================= */
 
   if (screen === "scanner") {
@@ -804,17 +700,9 @@ function App() {
                 playsInline
                 muted
                 className="camera-video"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                }}
               />
 
-              <div className="camera-placeholder">
+              <div className="camera-overlay">
                 <div className="camera-label">
                   BARCODE SCANNER ACTIVE
                 </div>
@@ -884,133 +772,75 @@ function App() {
           </button>
         </div>
 
-        {/* EXPIRED ANIMATION */}
-
         {scanResult.status ===
           "expired" && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background:
-                "rgba(127, 29, 29, 0.96)",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              textAlign: "center",
-              color: "white",
-              zIndex: 200,
-              animation:
-                "expiredFade 1s ease forwards",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "70px",
-                marginBottom: "20px",
-                animation:
-                  "expiredPulse 1.2s infinite",
-              }}
-            >
-              ⚠
+          <div className="expired-alert-screen">
+            <div className="expired-alert-card">
+              <div className="expired-pulse">
+                !
+              </div>
+
+              <div className="expired-warning">
+                WARNING
+              </div>
+
+              <h1>
+                WRISTBAND EXPIRED
+              </h1>
+
+              <p className="expired-alert-text">
+                This worker's wristband
+                has expired and requires
+                immediate verification.
+              </p>
+
+              <div className="expired-worker-details">
+                <div>
+                  <span>WORKER NAME</span>
+
+                  <strong>
+                    {scanResult.name}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>WORKER ID</span>
+
+                  <strong>
+                    {scanResult.workerId}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>BARCODE</span>
+
+                  <strong>
+                    {scanResult.barcode}
+                  </strong>
+                </div>
+              </div>
+
+              <button
+                className="primary-button"
+                onClick={openScanner}
+              >
+                CONTINUE
+              </button>
             </div>
-
-            <h1
-              style={{
-                color: "white",
-                fontSize: "42px",
-                marginBottom: "15px",
-              }}
-            >
-              WRISTBAND EXPIRED
-            </h1>
-
-            <p
-              style={{
-                fontSize: "20px",
-                margin: "8px",
-              }}
-            >
-              <strong>
-                {scanResult.name}
-              </strong>
-            </p>
-
-            <p>
-              Barcode:{" "}
-              {scanResult.barcode}
-            </p>
-
-            <p>
-              Worker ID:{" "}
-              {scanResult.workerId}
-            </p>
-
-            <p
-              style={{
-                marginTop: "25px",
-                opacity: 0.8,
-              }}
-            >
-              Access requires attention.
-            </p>
-
-            <button
-              className="primary-button"
-              style={{
-                marginTop: "30px",
-              }}
-              onClick={openScanner}
-            >
-              CONTINUE
-            </button>
-
-            <style>
-              {`
-                @keyframes expiredPulse {
-                  0% {
-                    transform: scale(1);
-                  }
-
-                  50% {
-                    transform: scale(1.15);
-                  }
-
-                  100% {
-                    transform: scale(1);
-                  }
-                }
-
-                @keyframes expiredFade {
-                  from {
-                    opacity: 0;
-                  }
-
-                  to {
-                    opacity: 1;
-                  }
-                }
-              `}
-            </style>
           </div>
         )}
 
         <div
           className={`result-icon ${scanResult.status}`}
         >
-          {scanResult.status ===
-          "valid"
+          {scanResult.status === "valid"
             ? "✓"
-            : scanResult.status ===
-              "expiring"
+            : scanResult.status === "expiring"
             ? "!"
             : "✕"}
         </div>
 
-        <h1>
-          Worker Details
-        </h1>
+        <h1>Worker Details</h1>
 
         <div
           className={`status-banner ${scanResult.status}`}
@@ -1038,7 +868,7 @@ function App() {
           </div>
         </div>
 
-        <div className="details-card final-details-card">
+        <div className="details-card">
           <div className="detail-row">
             <span className="detail-label">
               NAME
@@ -1150,18 +980,10 @@ function App() {
         </h1>
 
         {scanResult?.alreadyScanned && (
-          <div
-            style={{
-              marginBottom: "20px",
-              padding: "20px",
-              background: "#fef3c7",
-              borderRadius: "15px",
-              maxWidth: "400px",
-            }}
-          >
-            <h3>
+          <div className="already-scanned-alert">
+            <h2>
               {scanResult.name}
-            </h3>
+            </h2>
 
             <p>
               Barcode:{" "}
@@ -1252,98 +1074,96 @@ function App() {
           </div>
         ) : (
           <div className="history-list">
-            {history.map(
-              (record) => (
-                <div
-                  key={record.id}
-                  className={`history-card ${record.status}`}
-                >
-                  <div className="history-card-header">
-                    <div>
-                      <h3>
-                        {record.name}
-                      </h3>
+            {history.map((record) => (
+              <div
+                key={record.id}
+                className={`history-card ${record.status}`}
+              >
+                <div className="history-card-header">
+                  <div>
+                    <h3>
+                      {record.name}
+                    </h3>
 
-                      <span>
-                        {record.workerId}
-                      </span>
-                    </div>
-
-                    <span
-                      className={`status-badge ${record.status}`}
-                    >
-                      {getStatusText(
-                        record.status
-                      )}
+                    <span>
+                      {record.workerId}
                     </span>
                   </div>
 
-                  <div className="history-details">
-                    <p>
-                      <strong>
-                        WORKER UNIT
-                      </strong>
-
-                      <span>
-                        {record.workerUnit}
-                      </span>
-                    </p>
-
-                    <p>
-                      <strong>
-                        LOCATION
-                      </strong>
-
-                      <span>
-                        {record.location}
-                      </span>
-                    </p>
-
-                    <p>
-                      <strong>
-                        ENTRY / EXIT
-                      </strong>
-
-                      <span
-                        className={`entry-exit-tag ${record.entryExit.toLowerCase()}`}
-                      >
-                        {record.entryExit}
-                      </span>
-                    </p>
-
-                    <p>
-                      <strong>
-                        BARCODE
-                      </strong>
-
-                      <span>
-                        {record.barcode}
-                      </span>
-                    </p>
-
-                    <p>
-                      <strong>
-                        DATE
-                      </strong>
-
-                      <span>
-                        {record.date}
-                      </span>
-                    </p>
-
-                    <p>
-                      <strong>
-                        TIME
-                      </strong>
-
-                      <span>
-                        {record.time}
-                      </span>
-                    </p>
-                  </div>
+                  <span
+                    className={`status-badge ${record.status}`}
+                  >
+                    {getStatusText(
+                      record.status
+                    )}
+                  </span>
                 </div>
-              )
-            )}
+
+                <div className="history-details">
+                  <p>
+                    <strong>
+                      WORKER UNIT
+                    </strong>
+
+                    <span>
+                      {record.workerUnit}
+                    </span>
+                  </p>
+
+                  <p>
+                    <strong>
+                      LOCATION
+                    </strong>
+
+                    <span>
+                      {record.location}
+                    </span>
+                  </p>
+
+                  <p>
+                    <strong>
+                      ENTRY / EXIT
+                    </strong>
+
+                    <span
+                      className={`entry-exit-tag ${record.entryExit.toLowerCase()}`}
+                    >
+                      {record.entryExit}
+                    </span>
+                  </p>
+
+                  <p>
+                    <strong>
+                      BARCODE
+                    </strong>
+
+                    <span>
+                      {record.barcode}
+                    </span>
+                  </p>
+
+                  <p>
+                    <strong>
+                      DATE
+                    </strong>
+
+                    <span>
+                      {record.date}
+                    </span>
+                  </p>
+
+                  <p>
+                    <strong>
+                      TIME
+                    </strong>
+
+                    <span>
+                      {record.time}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
