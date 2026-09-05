@@ -8,9 +8,12 @@ Validates:
 4. ReportLab PDF audit report generation and byte integrity.
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import numpy as np
 import cv2
-import pytest
 
 from app.services.cv_engine import cv_engine
 from app.services.calibration_ai import calibration_ai
