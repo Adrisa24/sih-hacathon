@@ -3,11 +3,9 @@ import "./App.css";
 
 function App() {
   const [screen, setScreen] = useState("home");
-  const [rfid, setRfid] = useState("");
   const [history, setHistory] = useState([]);
   const [scanResult, setScanResult] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [error, setError] = useState("");
   const [location, setLocation] = useState(
     "Fetching current location..."
   );
@@ -16,13 +14,15 @@ function App() {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const autoScanTimerRef = useRef(null);
+  const barcodeScanIntervalRef = useRef(null);
+  const detectedBarcodeRef = useRef(false);
 
   /* =================================
-     SAMPLE RFID DATABASE
+     SAMPLE BARCODE DATABASE
   ================================= */
 
   const wristbandDatabase = {
-    RFID123: {
+    BARCODE123: {
       name: "Rahul Sharma",
       workerId: "WRK-1024",
       workerUnit: "Production Unit A",
@@ -30,7 +30,7 @@ function App() {
       entryExit: "ENTRY",
     },
 
-    RFID456: {
+    BARCODE456: {
       name: "Priya Singh",
       workerId: "WRK-2048",
       workerUnit: "Maintenance Unit",
@@ -38,7 +38,7 @@ function App() {
       entryExit: "EXIT",
     },
 
-    RFID789: {
+    BARCODE789: {
       name: "Aman Kumar",
       workerId: "WRK-3072",
       workerUnit: "Safety Department",
@@ -75,9 +75,10 @@ function App() {
   const getFormattedDate = () => {
     const now = new Date();
 
-    const day = String(
-      now.getDate()
-    ).padStart(2, "0");
+    const day = String(now.getDate()).padStart(
+      2,
+      "0"
+    );
 
     const month = String(
       now.getMonth() + 1
@@ -97,6 +98,7 @@ function App() {
       setLocation(
         "Location is not supported by this browser."
       );
+
       return;
     }
 
@@ -117,9 +119,13 @@ function App() {
             `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
           );
 
-          const data = await response.json();
+          const data =
+            await response.json();
 
-          if (data && data.display_name) {
+          if (
+            data &&
+            data.display_name
+          ) {
             setLocation(
               data.display_name
             );
@@ -203,6 +209,11 @@ function App() {
       if (videoRef.current) {
         videoRef.current.srcObject =
           stream;
+
+        videoRef.current.onloadedmetadata =
+          () => {
+            videoRef.current.play();
+          };
       }
     } catch (error) {
       console.error(
@@ -233,73 +244,39 @@ function App() {
   };
 
   /* =================================
-     PAGE 3 CAMERA EFFECT
+     STOP BARCODE DETECTION
   ================================= */
 
-  useEffect(() => {
-    if (screen === "scanner") {
-      startCamera();
-      getCurrentLocation();
+  const stopBarcodeDetection = () => {
+    if (barcodeScanIntervalRef.current) {
+      clearInterval(
+        barcodeScanIntervalRef.current
+      );
 
-      /*
-        AUTOMATIC DEMO SCAN
-
-        This remains automatic so you
-        do not need to press a button.
-      */
-
-      autoScanTimerRef.current =
-        setTimeout(() => {
-          automaticScan();
-        }, 4000);
+      barcodeScanIntervalRef.current =
+        null;
     }
-
-    return () => {
-      stopCamera();
-
-      if (autoScanTimerRef.current) {
-        clearTimeout(
-          autoScanTimerRef.current
-        );
-      }
-    };
-  }, [screen]);
-
-  /* =================================
-     START
-  ================================= */
-
-  const startScanning = () => {
-    setScreen("intro");
-  };
-
-  /* =================================
-     OPEN SCANNER
-  ================================= */
-
-  const openScanner = () => {
-    setRfid("");
-    setError("");
-    setCameraError("");
-    setScreen("scanner");
   };
 
   /* =================================
      CHECK IF ALREADY SCANNED
 
-     SAME RFID CANNOT SCAN TWICE
-     WITHIN 1 MINUTE
+     SAME PERSON CANNOT SCAN TWICE
+     WITHIN ONE MINUTE
   ================================= */
 
   const checkAlreadyScanned = (
-    enteredRFID
+    enteredBarcode
   ) => {
     const now = Date.now();
 
     const previousScan = history.find(
       (record) =>
-        record.rfid === enteredRFID &&
-        now - record.timestamp < 60000
+        record.barcode ===
+          enteredBarcode &&
+        now -
+          record.timestamp <
+          60000
     );
 
     return previousScan;
@@ -311,14 +288,14 @@ function App() {
 
   const createScanData = (
     worker,
-    enteredRFID
+    enteredBarcode
   ) => {
     const now = new Date();
 
     return {
       ...worker,
 
-      rfid: enteredRFID,
+      barcode: enteredBarcode,
 
       id: Date.now(),
 
@@ -339,33 +316,29 @@ function App() {
   };
 
   /* =================================
-     PROCESS RFID
+     PROCESS BARCODE
   ================================= */
 
-  const processRFID = (rfidValue) => {
-    const enteredRFID = (
-      rfidValue || rfid
-    )
-      .trim()
-      .toUpperCase();
+  const processBarcode = (
+    barcodeValue
+  ) => {
+    const enteredBarcode =
+      barcodeValue
+        ?.trim()
+        .toUpperCase();
 
-    if (!enteredRFID) {
-      setError(
-        "Please enter an RFID number."
-      );
-
+    if (!enteredBarcode) {
       return;
     }
 
     const alreadyScanned =
-      checkAlreadyScanned(enteredRFID);
-
-    /*
-      SAME PERSON SCANNED AGAIN
-      WITHIN ONE MINUTE
-    */
+      checkAlreadyScanned(
+        enteredBarcode
+      );
 
     if (alreadyScanned) {
+      setIsScanning(false);
+
       setScanResult({
         success: false,
 
@@ -373,7 +346,8 @@ function App() {
 
         name: alreadyScanned.name,
 
-        rfid: alreadyScanned.rfid,
+        barcode:
+          alreadyScanned.barcode,
 
         workerId:
           alreadyScanned.workerId,
@@ -382,17 +356,21 @@ function App() {
           "This worker has already been scanned within the last 1 minute.",
       });
 
+      stopBarcodeDetection();
+      stopCamera();
+
       setScreen("failed");
 
       return;
     }
 
-    setError("");
     setIsScanning(true);
 
     setTimeout(() => {
       const worker =
-        wristbandDatabase[enteredRFID];
+        wristbandDatabase[
+          enteredBarcode
+        ];
 
       if (!worker) {
         setIsScanning(false);
@@ -401,23 +379,29 @@ function App() {
           success: false,
 
           message:
-            "RFID wristband was not found in the system.",
+            "Barcode was not found in the system.",
         });
+
+        stopBarcodeDetection();
+        stopCamera();
 
         setScreen("failed");
 
         return;
       }
 
-      const scanData = createScanData(
-        worker,
-        enteredRFID
-      );
+      const scanData =
+        createScanData(
+          worker,
+          enteredBarcode
+        );
 
-      setHistory((previousHistory) => [
-        scanData,
-        ...previousHistory,
-      ]);
+      setHistory(
+        (previousHistory) => [
+          scanData,
+          ...previousHistory,
+        ]
+      );
 
       setScanResult({
         success: true,
@@ -426,102 +410,196 @@ function App() {
 
       setIsScanning(false);
 
+      stopBarcodeDetection();
       stopCamera();
 
       setScreen("result");
-    }, 1800);
+    }, 1000);
   };
 
   /* =================================
-     AUTOMATIC DEMO SCAN
-
-     THIS STARTS AUTOMATICALLY
-     WHEN THE SCANNER PAGE OPENS.
+     AUTOMATIC CAMERA BARCODE SCANNER
   ================================= */
 
-  const automaticScan = () => {
-    if (isScanning) {
+  const startBarcodeDetection = () => {
+    if (
+      !("BarcodeDetector" in window)
+    ) {
+      console.log(
+        "BarcodeDetector is not supported. Demo scanner will be used."
+      );
+
       return;
     }
 
-    setIsScanning(true);
+    try {
+      const barcodeDetector =
+        new window.BarcodeDetector({
+          formats: [
+            "code_128",
+            "code_39",
+            "ean_13",
+            "ean_8",
+            "upc_a",
+            "upc_e",
+            "qr_code",
+          ],
+        });
 
-    const demoRFIDs = [
-      "RFID123",
-      "RFID456",
-      "RFID789",
+      barcodeScanIntervalRef.current =
+        setInterval(async () => {
+          if (
+            detectedBarcodeRef.current ||
+            isScanning ||
+            !videoRef.current ||
+            videoRef.current.readyState <
+              2
+          ) {
+            return;
+          }
+
+          try {
+            const detectedBarcodes =
+              await barcodeDetector.detect(
+                videoRef.current
+              );
+
+            if (
+              detectedBarcodes.length >
+              0
+            ) {
+              const barcodeValue =
+                detectedBarcodes[0]
+                  .rawValue;
+
+              if (barcodeValue) {
+                detectedBarcodeRef.current =
+                  true;
+
+                stopBarcodeDetection();
+
+                processBarcode(
+                  barcodeValue
+                );
+              }
+            }
+          } catch (error) {
+            console.log(
+              "Barcode detection error:",
+              error
+            );
+          }
+        }, 500);
+    } catch (error) {
+      console.error(
+        "Barcode scanner error:",
+        error
+      );
+    }
+  };
+
+  /* =================================
+     AUTOMATIC DEMO SCAN FALLBACK
+
+     THIS STARTS AUTOMATICALLY.
+     NO BUTTON IS REQUIRED.
+  ================================= */
+
+  const automaticScan = () => {
+    if (
+      isScanning ||
+      detectedBarcodeRef.current
+    ) {
+      return;
+    }
+
+    const demoBarcodes = [
+      "BARCODE123",
+      "BARCODE456",
+      "BARCODE789",
     ];
 
-    const randomRFID =
-      demoRFIDs[
+    const randomBarcode =
+      demoBarcodes[
         Math.floor(
           Math.random() *
-            demoRFIDs.length
+            demoBarcodes.length
         )
       ];
 
-    setTimeout(() => {
-      const alreadyScanned =
-        checkAlreadyScanned(randomRFID);
+    processBarcode(randomBarcode);
+  };
+
+  /* =================================
+     PAGE 3 CAMERA EFFECT
+  ================================= */
+
+  useEffect(() => {
+    if (screen === "scanner") {
+      detectedBarcodeRef.current =
+        false;
+
+      startCamera();
+      getCurrentLocation();
+
+      const detectionTimer =
+        setTimeout(() => {
+          startBarcodeDetection();
+        }, 1500);
 
       /*
-        IF THE AUTOMATICALLY SELECTED
-        RFID WAS SCANNED WITHIN 1 MINUTE,
-        SHOW ALREADY SCANNED
+        AUTOMATIC SCAN FALLBACK
+
+        This keeps the previous
+        automatic scanning feature.
       */
 
-      if (alreadyScanned) {
-        setIsScanning(false);
+      autoScanTimerRef.current =
+        setTimeout(() => {
+          if (
+            !detectedBarcodeRef.current
+          ) {
+            automaticScan();
+          }
+        }, 5000);
+
+      return () => {
+        clearTimeout(
+          detectionTimer
+        );
 
         stopCamera();
+        stopBarcodeDetection();
 
-        setScanResult({
-          success: false,
+        if (
+          autoScanTimerRef.current
+        ) {
+          clearTimeout(
+            autoScanTimerRef.current
+          );
+        }
+      };
+    }
 
-          alreadyScanned: true,
+    return undefined;
+  }, [screen]);
 
-          name: alreadyScanned.name,
+  /* =================================
+     START
+  ================================= */
 
-          rfid: alreadyScanned.rfid,
+  const startScanning = () => {
+    setScreen("intro");
+  };
 
-          workerId:
-            alreadyScanned.workerId,
+  /* =================================
+     OPEN SCANNER
+  ================================= */
 
-          message:
-            "This worker has already been scanned within the last 1 minute.",
-        });
-
-        setScreen("failed");
-
-        return;
-      }
-
-      setRfid(randomRFID);
-
-      const worker =
-        wristbandDatabase[randomRFID];
-
-      const scanData = createScanData(
-        worker,
-        randomRFID
-      );
-
-      setHistory((previousHistory) => [
-        scanData,
-        ...previousHistory,
-      ]);
-
-      setScanResult({
-        success: true,
-        ...scanData,
-      });
-
-      setIsScanning(false);
-
-      stopCamera();
-
-      setScreen("result");
-    }, 2500);
+  const openScanner = () => {
+    setCameraError("");
+    setIsScanning(false);
+    setScreen("scanner");
   };
 
   /* =================================
@@ -540,7 +618,7 @@ function App() {
     return (
       <div className="app-screen home-screen">
         <header className="home-header">
-          <h1>SULFISCAN</h1>
+          <h1>SULFSCAN</h1>
 
           <span className="app-tag">
             SMART WORKER CONTROL
@@ -548,11 +626,6 @@ function App() {
         </header>
 
         <main className="home-content">
-          <img
-  src="/sulfscan-logo.png"
-  alt="SULFSCAN Logo"
-  className="app-logo"
-/>
           <div className="hero-badge">
             SMART • FAST • SECURE
           </div>
@@ -567,11 +640,12 @@ function App() {
           </h2>
 
           <p className="home-description">
-            A smart RFID-based system
-            designed to manage worker
-            access, monitor entry and
-            exit, and verify worker
-            information instantly.
+            A smart barcode-based
+            system designed to manage
+            worker access, monitor
+            entry and exit, and verify
+            worker information
+            instantly.
           </p>
 
           <button
@@ -585,7 +659,7 @@ function App() {
         <div className="moving-features">
           <div className="feature-track">
             <span>
-              SMART RFID SCANNING
+              SMART BARCODE SCANNING
             </span>
 
             <span>
@@ -609,7 +683,7 @@ function App() {
             </span>
 
             <span>
-              SMART RFID SCANNING
+              SMART BARCODE SCANNING
             </span>
 
             <span>
@@ -653,7 +727,7 @@ function App() {
           <div className="rfid-card">
             <div className="rfid-chip"></div>
 
-            <span>RFID</span>
+            <span>SCAN</span>
           </div>
 
           <div className="wristband-strap"></div>
@@ -662,9 +736,10 @@ function App() {
         <h1>Scan Your Wristband</h1>
 
         <p className="subtitle intro-text">
-          Place your RFID wristband near
-          the scanner for quick and secure
-          worker verification.
+          Place your worker wristband
+          near the scanner for quick
+          and secure worker
+          verification.
         </p>
 
         <button
@@ -678,7 +753,7 @@ function App() {
   }
 
   /* =================================
-     PAGE 3 — SCANNER
+     PAGE 3 — BARCODE SCANNER
   ================================= */
 
   if (screen === "scanner") {
@@ -695,12 +770,12 @@ function App() {
 
         <div className="scan-header">
           <h1>
-            Scan Your Wristband
+            Scan Worker Barcode
           </h1>
 
           <p>
-            Position the RFID wristband
-            near the scanner.
+            Position the barcode in
+            front of the camera.
           </p>
         </div>
 
@@ -741,7 +816,7 @@ function App() {
 
               <div className="camera-placeholder">
                 <div className="camera-label">
-                  RFID SCANNER ACTIVE
+                  BARCODE SCANNER ACTIVE
                 </div>
 
                 <div className="scanner-frame">
@@ -757,7 +832,8 @@ function App() {
                 </div>
 
                 <div className="scanner-tap-text">
-                  AUTOMATIC SCANNING ACTIVE
+                  AUTOMATIC BARCODE
+                  SCANNING ACTIVE
                 </div>
               </div>
             </>
@@ -768,67 +844,9 @@ function App() {
           <span className="status-dot"></span>
 
           <span>
-            Scanner ready for wristband
+            Camera ready for barcode
+            scanning
           </span>
-        </div>
-
-        <div className="manual-rfid-box">
-          <div className="manual-divider">
-            <span>
-              OR ENTER RFID MANUALLY
-            </span>
-          </div>
-
-          <input
-            type="text"
-            placeholder="Enter RFID number"
-            value={rfid}
-            onChange={(event) => {
-              setRfid(
-                event.target.value
-              );
-
-              setError("");
-            }}
-            onKeyDown={(event) => {
-              if (
-                event.key === "Enter"
-              ) {
-                if (
-                  autoScanTimerRef.current
-                ) {
-                  clearTimeout(
-                    autoScanTimerRef.current
-                  );
-                }
-
-                processRFID();
-              }
-            }}
-          />
-
-          {error && (
-            <p className="rfid-error">
-              {error}
-            </p>
-          )}
-
-          <button
-            className="primary-button verify-button"
-            onClick={() => {
-              if (
-                autoScanTimerRef.current
-              ) {
-                clearTimeout(
-                  autoScanTimerRef.current
-                );
-              }
-
-              processRFID();
-            }}
-          >
-            VERIFY RFID
-          </button>
         </div>
 
         {isScanning && (
@@ -837,7 +855,7 @@ function App() {
 
             <p className="loading-text">
               Scanning and verifying
-              wristband...
+              worker...
             </p>
           </div>
         )}
@@ -920,7 +938,8 @@ function App() {
             </p>
 
             <p>
-              RFID: {scanResult.rfid}
+              Barcode:{" "}
+              {scanResult.barcode}
             </p>
 
             <p>
@@ -942,9 +961,7 @@ function App() {
               style={{
                 marginTop: "30px",
               }}
-              onClick={() =>
-                setScreen("scanner")
-              }
+              onClick={openScanner}
             >
               CONTINUE
             </button>
@@ -1076,11 +1093,11 @@ function App() {
 
           <div className="detail-row">
             <span className="detail-label">
-              RFID NUMBER
+              BARCODE
             </span>
 
             <span>
-              {scanResult.rfid}
+              {scanResult.barcode}
             </span>
           </div>
 
@@ -1147,7 +1164,8 @@ function App() {
             </h3>
 
             <p>
-              RFID: {scanResult.rfid}
+              Barcode:{" "}
+              {scanResult.barcode}
             </p>
 
             <p>
@@ -1159,7 +1177,7 @@ function App() {
 
         <div className="failure-message">
           {scanResult?.message ||
-            "Unable to verify the RFID wristband."}
+            "Unable to verify the worker barcode."}
         </div>
 
         <button
@@ -1290,6 +1308,16 @@ function App() {
                         className={`entry-exit-tag ${record.entryExit.toLowerCase()}`}
                       >
                         {record.entryExit}
+                      </span>
+                    </p>
+
+                    <p>
+                      <strong>
+                        BARCODE
+                      </strong>
+
+                      <span>
+                        {record.barcode}
                       </span>
                     </p>
 
