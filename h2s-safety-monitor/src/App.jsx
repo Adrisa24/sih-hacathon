@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import "./App.css";
+import { supabase } from "./supabaseClient";
 
 function App() {
+  const [session, setSession] = useState(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState("");
   const [screen, setScreen] = useState("home");
   const [history, setHistory] = useState([]);
   const [scanResult, setScanResult] = useState(null);
@@ -272,87 +277,78 @@ function App() {
      PROCESS BARCODE
   ================================= */
 
-  const processBarcode = (barcodeValue) => {
-    const enteredBarcode = barcodeValue
-      ?.trim()
-      .toUpperCase();
+  const processBarcode = async (barcodeValue) => {
+    const enteredBarcode = barcodeValue?.trim().toUpperCase();
+    if (!enteredBarcode) return;
 
-    if (!enteredBarcode) {
-      return;
-    }
-
-    const alreadyScanned =
-      checkAlreadyScanned(enteredBarcode);
-
+    const alreadyScanned = checkAlreadyScanned(enteredBarcode);
     if (alreadyScanned) {
       setIsScanning(false);
-
       setScanResult({
         success: false,
         alreadyScanned: true,
-
         name: alreadyScanned.name,
         barcode: alreadyScanned.barcode,
         workerId: alreadyScanned.workerId,
-
-        message:
-          "This worker has already been scanned within the last 1 minute.",
+        message: "This worker has already been scanned within the last 1 minute.",
       });
-
       stopBarcodeDetection();
       stopCamera();
-
       setScreen("failed");
-
       return;
     }
 
     setIsScanning(true);
 
-    setTimeout(() => {
-      const worker =
-        wristbandDatabase[enteredBarcode];
+    try {
+      const { data: workers, error } = await supabase
+        .from('workers')
+        .select('*')
+        .eq('barcode', enteredBarcode)
+        .limit(1);
 
-      if (!worker) {
+      if (error || !workers || workers.length === 0) {
         setIsScanning(false);
-
-        setScanResult({
-          success: false,
-
-          message:
-            "Barcode was not found in the system.",
-        });
-
+        setScanResult({ success: false, message: "Barcode was not found in the system." });
         stopBarcodeDetection();
         stopCamera();
-
         setScreen("failed");
-
         return;
       }
 
-      const scanData = createScanData(
-        worker,
-        enteredBarcode
-      );
+      const worker = workers[0];
+      const workerDetails = {
+        name: worker.name,
+        workerId: worker.worker_id,
+        workerUnit: worker.worker_unit,
+        status: worker.status,
+        entryExit: worker.entry_exit
+      };
 
-      setHistory((previousHistory) => [
-        scanData,
-        ...previousHistory,
-      ]);
+      const scanData = createScanData(workerDetails, enteredBarcode);
 
-      setScanResult({
-        success: true,
-        ...scanData,
-      });
+      // Save to Supabase
+      await supabase.from('scans').insert([{
+        worker_id: worker.id,
+        barcode: enteredBarcode,
+        location: location,
+        scan_type: worker.entry_exit,
+        admin_id: session?.user?.id
+      }]);
 
+      setHistory((previousHistory) => [scanData, ...previousHistory]);
+      setScanResult({ success: true, ...scanData });
       setIsScanning(false);
-
       stopBarcodeDetection();
       stopCamera();
-
       setScreen("result");
-    }, 1000);
+    } catch (err) {
+      setIsScanning(false);
+      setScanResult({ success: false, message: "Network error checking barcode." });
+      stopBarcodeDetection();
+      stopCamera();
+      setScreen("failed");
+    }
   };
 
   /* =================================
@@ -521,6 +517,38 @@ function App() {
   const clearHistory = () => {
     setHistory([]);
   };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError("");
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setAuthError(error.message);
+    else setSession(data.session);
+  };
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+  }, []);
+
+  /* =================================
+     AUTH SCREEN
+  ================================= */
+  if (!session) {
+    return (
+      <div className="app-screen home-screen" style={{ justifyContent: 'center', alignItems: 'center' }}>
+        <div style={{ background: '#1e1e1e', padding: '30px', borderRadius: '12px', width: '300px', textAlign: 'center' }}>
+          <h2>Admin Login</h2>
+          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
+            <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={{ padding: '10px', borderRadius: '6px' }} />
+            <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} style={{ padding: '10px', borderRadius: '6px' }} />
+            <button type="submit" className="primary-button">LOGIN</button>
+            {authError && <p style={{ color: 'red', fontSize: '14px' }}>{authError}</p>}
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   /* =================================
      PAGE 1 — HOME
