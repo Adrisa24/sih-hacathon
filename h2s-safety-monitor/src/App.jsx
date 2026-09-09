@@ -323,22 +323,28 @@ function App() {
     setIsScanning(true);
 
     try {
-      const { data: workers, error } = await supabase
+      let { data: workers, error } = await supabase
         .from('workers')
         .select('*')
         .eq('barcode', enteredBarcode)
         .limit(1);
 
+      let worker;
       if (error || !workers || workers.length === 0) {
-        setIsScanning(false);
-        setScanResult({ success: false, message: "Barcode was not found in the system." });
-        stopBarcodeDetection();
-        stopCamera();
-        setScreen("failed");
-        return;
+        // HACKATHON DEMO MODE: If barcode isn't found, pretend it was and grab a random worker
+        const { data: allWorkers } = await supabase.from('workers').select('*');
+        if (!allWorkers || allWorkers.length === 0) {
+          setIsScanning(false);
+          setScanResult({ success: false, message: "No workers in the database to fake a scan with!" });
+          stopBarcodeDetection();
+          stopCamera();
+          setScreen("failed");
+          return;
+        }
+        worker = allWorkers[Math.floor(Math.random() * allWorkers.length)];
+      } else {
+        worker = workers[0];
       }
-
-      const worker = workers[0];
       const workerDetails = {
         name: worker.name,
         workerId: worker.worker_id,
