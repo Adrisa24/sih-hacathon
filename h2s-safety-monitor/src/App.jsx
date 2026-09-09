@@ -1,6 +1,26 @@
 import { useState, useEffect, useRef } from "react";
 import "./App.css";
 import { supabase } from "./supabaseClient";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY || "AIzaSy_fake_fallback");
+
+const analyzeStripWithGemini = async (base64Image) => {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const prompt = "This is a photo of a worker safety badge containing an H2S colorimetric strip. Analyze the color of the strip (which turns darker brown/black when exposed to H2S gas). Estimate the exposure in parts per million (ppm). Only reply with a single number representing the ppm (like 0, 5, 10, 50, etc) and absolutely nothing else.";
+    const result = await model.generateContent([
+      prompt,
+      { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
+    ]);
+    const text = result.response.text();
+    return text.replace(/[^0-9.]/g, "");
+  } catch (err) {
+    console.error("Gemini Error:", err);
+    return "0";
+  }
+};
+
 
 function App() {
   const [session, setSession] = useState(null);
@@ -325,7 +345,24 @@ function App() {
         entryExit: worker.entry_exit
       };
 
+      // --- AI INTEGRATION: Capture Image from Video ---
+      let base64Image = null;
+      if (videoRef.current) {
+        const canvas = document.createElement("canvas");
+        canvas.width = videoRef.current.videoWidth;
+        canvas.height = videoRef.current.videoHeight;
+        canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        base64Image = canvas.toDataURL("image/jpeg").split(',')[1];
+      }
+
+      // --- Call Gemini ---
+      let ppm = "0";
+      if (base64Image) {
+        ppm = await analyzeStripWithGemini(base64Image);
+      }
+
       const scanData = createScanData(workerDetails, enteredBarcode);
+      scanData.ppm = ppm; // add ppm to local state
 
       // Save to Supabase
       await supabase.from('scans').insert([{
@@ -333,7 +370,8 @@ function App() {
         barcode: enteredBarcode,
         location: location,
         scan_type: worker.entry_exit,
-        admin_id: session?.user?.id
+        admin_id: session?.user?.id,
+        ppm: ppm
       }]);
 
       setHistory((previousHistory) => [scanData, ...previousHistory]);
@@ -940,6 +978,11 @@ function App() {
         </div>
 
         <div className="details-card">
+          <div className="detail-row">
+            <span className="detail-label">AI H₂S Reading</span>
+            <span className="detail-value" style={{ color: '#00e5ff', fontWeight: 'bold' }}>{scanResult.ppm || '0'} ppm</span>
+          </div>
+
           <div className="detail-row">
             <span className="detail-label">
               NAME
