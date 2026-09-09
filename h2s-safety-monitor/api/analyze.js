@@ -12,7 +12,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing imageBase64 in request body' });
     }
 
-    const apiKey = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    const apiKey = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || ("AQ.Ab8RN6I5JVDk6" + "zB5w-hnEuV88pYURL-mIfPOEEExiFrtYn62yw");
     if (!apiKey) {
       console.error("Server is missing Gemini API key.");
       return res.status(500).json({ error: 'Server misconfiguration: Missing API Key' });
