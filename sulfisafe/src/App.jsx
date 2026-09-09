@@ -420,11 +420,31 @@ const normalizeEmployee = (employee) => ({
 ===================================================== */
 
 export default function App() {
-  const [page, setPage] = useState("language");
-  const [language, setLanguage] = useState("en");
+  const [page, setPage] = useState(() => localStorage.getItem('sulfisafe_page') || "language");
+  const [language, setLanguage] = useState(() => localStorage.getItem('sulfisafe_lang') || "en");
 
   const [employees, setEmployees] = useState([]);
-  const [currentEmployee, setCurrentEmployee] = useState(null);
+  const [currentEmployee, setCurrentEmployee] = useState(() => {
+    const saved = localStorage.getItem('sulfisafe_currentEmployee');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  // Sync auth and page state to localStorage
+  useEffect(() => {
+    localStorage.setItem('sulfisafe_page', page);
+  }, [page]);
+
+  useEffect(() => {
+    localStorage.setItem('sulfisafe_lang', language);
+  }, [language]);
+
+  useEffect(() => {
+    if (currentEmployee) {
+      localStorage.setItem('sulfisafe_currentEmployee', JSON.stringify(currentEmployee));
+    } else {
+      localStorage.removeItem('sulfisafe_currentEmployee');
+    }
+  }, [currentEmployee]);
 
   const [issues, setIssues] = useState([]);
   const [emergencies, setEmergencies] = useState([]);

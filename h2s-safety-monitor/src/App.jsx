@@ -1,23 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import "./App.css";
 import { supabase } from "./supabaseClient";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY || "AIzaSy_fake_fallback");
-
 const analyzeStripWithGemini = async (base64Image) => {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = "This is a photo of a worker safety badge containing an H2S colorimetric strip. Analyze the color of the strip (which turns darker brown/black when exposed to H2S gas). Estimate the exposure in parts per million (ppm). Only reply with a single number representing the ppm (like 0, 5, 10, 50, etc) and absolutely nothing else.";
-    const result = await model.generateContent([
-      prompt,
-      { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
-    ]);
-    const text = result.response.text();
-    return text.replace(/[^0-9.]/g, "");
+    const response = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64: base64Image })
+    });
+    if (!response.ok) throw new Error("Failed to call AI backend");
+    return await response.json();
   } catch (err) {
-    console.error("Gemini Error:", err);
-    return "0";
+    console.error("Backend Error:", err);
+    return { ppm: 0, status: "Unknown", actions: "Network/AI Error" };
   }
 };
 
@@ -28,7 +23,14 @@ function App() {
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [screen, setScreen] = useState("home");
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState(() => {
+    const saved = localStorage.getItem('h2s_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+  
+  useEffect(() => {
+    localStorage.setItem('h2s_history', JSON.stringify(history));
+  }, [history]);
   const [scanResult, setScanResult] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
   const [location, setLocation] = useState(
@@ -345,6 +347,40 @@ function App() {
         entryExit: worker.entry_exit
       };
 
+      // --- DETERMINE ENTRY/EXIT AND CALCULATE HOURS ---
+      let currentScanType = 'ENTRY';
+      let hoursSpent = null;
+
+      const { data: lastScans } = await supabase
+        .from('scans')
+        .select('scanned_at, scan_type')
+        .eq('worker_id', worker.id)
+        .order('scanned_at', { ascending: false })
+        .limit(1);
+
+      if (lastScans && lastScans.length > 0) {
+        if (lastScans[0].scan_type === 'ENTRY') {
+          const entryTime = new Date(lastScans[0].scanned_at);
+          const exitTime = new Date();
+          const diffMs = exitTime - entryTime;
+          const calculatedHours = (diffMs / (1000 * 60 * 60));
+          
+          // Anomaly Check: If > 16 hours, assume they forgot to scan out yesterday. Override to ENTRY.
+          if (calculatedHours > 16) {
+            currentScanType = 'ENTRY';
+          } else {
+            currentScanType = 'EXIT';
+            hoursSpent = calculatedHours.toFixed(2);
+          }
+        }
+      }
+      
+      workerDetails.entryExit = currentScanType;
+
+      // Update the workers table to sync their live state (Fixes stale state bug)
+      await supabase.from('workers').update({ entry_exit: currentScanType }).eq('id', worker.id);
+
+
       // --- AI INTEGRATION: Capture Image from Video ---
       let base64Image = null;
       if (videoRef.current) {
@@ -356,22 +392,47 @@ function App() {
       }
 
       // --- Call Gemini ---
-      let ppm = "0";
+      let aiReport = { ppm: "0", status: "N/A", actions: "None" };
       if (base64Image) {
-        ppm = await analyzeStripWithGemini(base64Image);
+        aiReport = await analyzeStripWithGemini(base64Image);
+      }
+      
+      // Abort if no strip is detected in the camera frame
+      if (aiReport.status === "No Strip Detected") {
+        setScanResult({ success: false, message: "No H2S Strip Detected. Please ensure the yellow badge is clearly visible in the camera." });
+        setIsScanning(false);
+        stopBarcodeDetection();
+        stopCamera();
+        setScreen("failed");
+        return;
+      }
+      
+      if (aiReport.status === "Unknown") {
+        setScanResult({ success: false, message: "AI Analysis Error: " + (aiReport.actions || "Unknown Error") });
+        setIsScanning(false);
+        stopBarcodeDetection();
+        stopCamera();
+        setScreen("failed");
+        return;
       }
 
       const scanData = createScanData(workerDetails, enteredBarcode);
-      scanData.ppm = ppm; // add ppm to local state
+      scanData.ppm = String(aiReport.ppm);
+      scanData.aiStatus = aiReport.status;
+      scanData.aiActions = aiReport.actions;
+      scanData.hoursSpent = hoursSpent;
 
       // Save to Supabase
       await supabase.from('scans').insert([{
         worker_id: worker.id,
         barcode: enteredBarcode,
         location: location,
-        scan_type: worker.entry_exit,
+        scan_type: currentScanType,
         admin_id: session?.user?.id,
-        ppm: ppm
+        ppm: scanData.ppm,
+        ai_status: scanData.aiStatus,
+        ai_actions: scanData.aiActions,
+        hours_spent: hoursSpent
       }]);
 
       setHistory((previousHistory) => [scanData, ...previousHistory]);
@@ -982,6 +1043,25 @@ function App() {
             <span className="detail-label">AI H₂S Reading</span>
             <span className="detail-value" style={{ color: '#00e5ff', fontWeight: 'bold' }}>{scanResult.ppm || '0'} ppm</span>
           </div>
+          
+          <div className="detail-row">
+            <span className="detail-label">AI Safety Status</span>
+            <span className="detail-value" style={{ color: scanResult.aiStatus === 'Danger' ? '#ff4d4d' : scanResult.aiStatus === 'Warning' ? '#ffcc00' : '#00e5ff', fontWeight: 'bold' }}>
+              {scanResult.aiStatus || 'N/A'}
+            </span>
+          </div>
+
+          <div className="detail-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
+            <span className="detail-label">AI Recommended Actions</span>
+            <span className="detail-value" style={{ textAlign: 'left', lineHeight: '1.4' }}>{scanResult.aiActions || 'None'}</span>
+          </div>
+
+          {scanResult.hoursSpent && (
+            <div className="detail-row">
+              <span className="detail-label">Shift Duration</span>
+              <span className="detail-value" style={{ color: '#00ffaa', fontWeight: 'bold' }}>{scanResult.hoursSpent} hours</span>
+            </div>
+          )}
 
           <div className="detail-row">
             <span className="detail-label">
