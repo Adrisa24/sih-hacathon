@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
+import { supabase } from "./supabaseClient";
 
 /* =====================================================
    SULFISAFE - DEMO CREDENTIALS
@@ -467,37 +468,52 @@ export default function App() {
   ===================================================== */
 
   useEffect(() => {
-    const storedEmployees = localStorage.getItem("sulfisafeEmployees");
-    const storedIssues = localStorage.getItem("sulfisafeIssues");
-    const storedEmergencies = localStorage.getItem("sulfisafeEmergencies");
-    const storedAlerts = localStorage.getItem("sulfisafeAlerts");
-
-    if (storedEmployees) {
+    const loadData = async () => {
       try {
-        setEmployees(
-          JSON.parse(storedEmployees).map(
-            normalizeEmployee
-          )
-        );
-      } catch {
+        const { data: empData } = await supabase.from('sulfisafe_employees').select('*');
+        if (empData && empData.length > 0) {
+          setEmployees(empData.map(e => normalizeEmployee(e.data)));
+        } else {
+          setEmployees([defaultEmployee]);
+        }
+
+        const { data: issueData } = await supabase.from('sulfisafe_issues').select('*');
+        if (issueData) setIssues(issueData.map(i => i.data));
+
+        const { data: emergData } = await supabase.from('sulfisafe_emergencies').select('*');
+        if (emergData) setEmergencies(emergData.map(e => e.data));
+
+        const { data: alertData } = await supabase.from('sulfisafe_alerts').select('*');
+        if (alertData) setAlerts(alertData.map(a => a.data));
+      } catch (err) {
+        console.error('Supabase load error:', err);
         setEmployees([defaultEmployee]);
       }
-    } else {
-      setEmployees([defaultEmployee]);
-    }
-
-    if (storedIssues) setIssues(JSON.parse(storedIssues));
-    if (storedEmergencies) setEmergencies(JSON.parse(storedEmergencies));
-    if (storedAlerts) setAlerts(JSON.parse(storedAlerts));
+    };
+    loadData();
   }, []);
 
   useEffect(() => {
     if (employees.length > 0) {
+      const sync = async () => {
+        await supabase.from('sulfisafe_employees').upsert(
+          employees.map(e => ({ id: String(e.id), data: e }))
+        );
+      };
+      sync();
       localStorage.setItem("sulfisafeEmployees", JSON.stringify(employees));
     }
   }, [employees]);
 
   useEffect(() => {
+    const sync = async () => {
+      if (issues.length > 0) {
+        await supabase.from('sulfisafe_issues').upsert(
+          issues.map(i => ({ id: String(i.id), data: i }))
+        );
+      }
+    };
+    sync();
     localStorage.setItem("sulfisafeIssues", JSON.stringify(issues));
   }, [issues]);
 
@@ -509,6 +525,14 @@ export default function App() {
   }, [emergencies]);
 
   useEffect(() => {
+    const sync = async () => {
+      if (alerts.length > 0) {
+        await supabase.from('sulfisafe_alerts').upsert(
+          alerts.map(a => ({ id: String(a.id), data: a }))
+        );
+      }
+    };
+    sync();
     localStorage.setItem("sulfisafeAlerts", JSON.stringify(alerts));
   }, [alerts]);
 
